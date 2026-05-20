@@ -1,0 +1,190 @@
+import { useState, useEffect } from 'react'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import type { User as FirebaseUser } from 'firebase/auth'
+import { auth } from './lib/firebase'
+import {
+  subscribeToUsers,
+  subscribeToAppState,
+  recomputeNextOrderer,
+  syncAllowedEmails,
+  undoLastOrder,
+  formatCurrency
+} from './lib/firestore'
+import type { User, AppState, OrderSnapshot } from './types'
+import { LoginPage } from './components/LoginPage'
+import { UserCard } from './components/UserCard'
+import { OrderSummary } from './components/OrderSummary'
+import { ProcessOrderModal } from './components/ProcessOrderModal'
+import { UserModal } from './components/UserModal'
+
+export default function App() {
+  const [authUser, setAuthUser] = useState<FirebaseUser | null | undefined>(undefined)
+  const [users, setUsers] = useState<User[]>([])
+  const [appState, setAppState] = useState<AppState>({ nextOrdererId: null })
+  const [pendingUndo, setPendingUndo] = useState<OrderSnapshot | null>(null)
+  const [showProcessOrder, setShowProcessOrder] = useState(false)
+  const [editingUserId, setEditingUserId] = useState<string | null | undefined>(undefined)
+  const [undoConfirm, setUndoConfirm] = useState(false)
+
+  // Auth listener
+  useEffect(() => {
+    return onAuthStateChanged(auth, u => setAuthUser(u))
+  }, [])
+
+  // Firestore listeners
+  useEffect(() => {
+    if (!authUser) return
+    const unsub1 = subscribeToUsers(incoming => {
+      setUsers(incoming)
+    })
+    const unsub2 = subscribeToAppState(setAppState)
+    syncAllowedEmails()
+    return () => { unsub1(); unsub2() }
+  }, [authUser])
+
+  // Recompute next orderer whenever present users change
+  useEffect(() => {
+    if (!authUser || users.length === 0) return
+    recomputeNextOrderer(users)
+  }, [users.map(u => `${u.id}:${u.isPresent}`).join(',')])
+
+  if (authUser === undefined) {
+    return <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="text-gray-500 text-sm">Loading…</div>
+    </div>
+  }
+
+  if (!authUser) return <LoginPage />
+
+  const presentCount = users.filter(u => u.isPresent && u.name).length
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          <span className="text-xl">🍕</span>
+          <div className="flex-1">
+            <h1 className="font-bold text-white leading-tight">Man Night Pizza</h1>
+          </div>
+          <button
+            onClick={() => signOut(auth)}
+            className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+        {/* Undo banner */}
+        {pendingUndo && (
+          <div className="rounded-lg border border-yellow-600/50 bg-yellow-950/30 p-3 flex items-center gap-3">
+            <div className="flex-1 text-sm text-yellow-300">
+              Order of {formatCurrency(pendingUndo.totalAmount)} processed.
+            </div>
+            {undoConfirm ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => { await undoLastOrder(pendingUndo); setPendingUndo(null); setUndoConfirm(false) }}
+                  className="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Yes, undo
+                </button>
+                <button
+                  onClick={() => setUndoConfirm(false)}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setUndoConfirm(true)}
+                  className="text-xs bg-yellow-700/50 hover:bg-yellow-700 text-yellow-200 px-3 py-1 rounded transition-colors"
+                >
+                  Undo
+                </button>
+                <button
+                  onClick={() => setPendingUndo(null)}
+                  className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-colors"
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Order summary */}
+        <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} />
+
+        {/* Process order button */}
+        {presentCount > 0 && (
+          <div className="pb-2">
+            <button
+              onClick={() => setShowProcessOrder(true)}
+              className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3.5 rounded-xl font-bold text-base transition-colors shadow-lg shadow-blue-900/30"
+            >
+              Process Tonight's Order
+            </button>
+          </div>
+        )}
+
+        {/* Users list */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+              People · {presentCount} present
+            </h2>
+            <button
+              onClick={() => setEditingUserId(null)}
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium"
+            >
+              + Add person
+            </button>
+          </div>
+
+          {users.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-700 p-8 text-center">
+              <p className="text-gray-500 text-sm">No people added yet.</p>
+              <button
+                onClick={() => setEditingUserId(null)}
+                className="mt-3 text-blue-400 hover:text-blue-300 text-sm transition-colors"
+              >
+                Add the first person →
+              </button>
+            </div>
+          ) : (
+            users.map(user => (
+              <UserCard
+                key={user.id}
+                user={user}
+                isNextOrderer={user.id === appState.nextOrdererId}
+                onEdit={u => setEditingUserId(u.id)}
+              />
+            ))
+          )}
+        </div>
+      </main>
+
+      {/* Modals */}
+      {showProcessOrder && (
+        <ProcessOrderModal
+          users={users}
+          nextOrdererId={appState.nextOrdererId}
+          onClose={() => setShowProcessOrder(false)}
+          onProcessed={snapshot => { setPendingUndo(snapshot); setShowProcessOrder(false) }}
+        />
+      )}
+      {editingUserId !== undefined && (
+        <UserModal
+          user={editingUserId === null ? null : (users.find(u => u.id === editingUserId) ?? null)}
+          onClose={() => setEditingUserId(undefined)}
+        />
+      )}
+    </div>
+  )
+}

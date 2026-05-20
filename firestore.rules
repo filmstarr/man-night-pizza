@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAllowedUser() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/allowedEmails/$(request.auth.token.email));
+    }
+
+    // Public read so the login page can check an email before sending a link.
+    // Write requires being an already-allowed user.
+    match /allowedEmails/{email} {
+      allow read: if true;
+      allow write: if isAllowedUser();
+    }
+
+    // Everything else requires a signed-in, allowed user.
+    match /{document=**} {
+      allow read, write: if isAllowedUser();
+    }
+  }
+}

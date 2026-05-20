@@ -4,7 +4,6 @@
 .firebaserc
 
 # Firebase Hosting
-/firebase.json
 *.cache
 hosting/.cache
 
@@ -26,3 +25,15 @@ yarn-error.log*
 
 # Environment files (local configs)
 /.env.*
+.env.local
+.env
+
+# Build output
+/dist
+
+# Dependencies
+/node_modules
+
+# Editor
+.vscode/
+*.swp
