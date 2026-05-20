@@ -224,27 +224,29 @@ export function UserModal({ user, viewerIsAdmin, onClose }: Props) {
                   </div>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Adjust Balance (£)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
-                    placeholder="e.g. 10.00 or -5.50"
-                    value={balanceAdjust}
-                    onChange={e => setBalanceAdjust(e.target.value)}
-                  />
-                  <button
-                    onClick={handleAdjustBalance}
-                    disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 rounded-lg transition-colors font-medium"
-                  >
-                    Apply
-                  </button>
+              {viewerIsAdmin && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Adjust Balance (£)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                      placeholder="e.g. 10.00 or -5.50"
+                      value={balanceAdjust}
+                      onChange={e => setBalanceAdjust(e.target.value)}
+                    />
+                    <button
+                      onClick={handleAdjustBalance}
+                      disabled={saving}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 rounded-lg transition-colors font-medium"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Positive to add credit, negative to deduct.</p>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Positive to add credit, negative to deduct.</p>
-              </div>
+              )}
             </div>
           )}
 

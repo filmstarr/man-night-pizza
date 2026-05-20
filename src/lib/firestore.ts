@@ -30,11 +30,7 @@ export function subscribeToUsers(callback: (users: User[]) => void) {
       if (!Array.isArray(data.emails)) data.emails = []
       return { id: d.id, ...data } as User
     })
-    users.sort((a, b) => {
-      const adminDiff = (b.isAdmin ? 1 : 0) - (a.isAdmin ? 1 : 0)
-      if (adminDiff !== 0) return adminDiff
-      return a.name.localeCompare(b.name)
-    })
+    users.sort((a, b) => a.name.localeCompare(b.name))
     callback(users)
   })
 }
@@ -211,6 +207,26 @@ export async function undoLastOrder(snapshot: OrderSnapshot) {
         balance: s.balanceBefore,
         currentPizza: s.pizzaBefore,
         isPresent: s.wasPresentBefore
+      })
+    )
+  )
+}
+
+export async function resetAllBalances(users: User[]) {
+  await Promise.all(
+    users.filter(u => u.name).map(u =>
+      updateDoc(doc(db, USERS_COLLECTION, u.id), { balance: 0 })
+    )
+  )
+}
+
+export async function resetAllOrders(users: User[]) {
+  await Promise.all(
+    users.filter(u => u.name).map(u =>
+      updateDoc(doc(db, USERS_COLLECTION, u.id), {
+        currentPizza: u.defaultPizza,
+        pizzaOverridden: false,
+        isSharing: false
       })
     )
   )

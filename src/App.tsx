@@ -8,6 +8,8 @@ import {
   recomputeNextOrderer,
   syncAllowedEmails,
   undoLastOrder,
+  resetAllBalances,
+  resetAllOrders,
   formatCurrency
 } from './lib/firestore'
 import type { User, AppState, OrderSnapshot } from './types'
@@ -25,6 +27,13 @@ export default function App() {
   const [showProcessOrder, setShowProcessOrder] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null | undefined>(undefined)
   const [undoConfirm, setUndoConfirm] = useState(false)
+  const [resetBalancesConfirm, setResetBalancesConfirm] = useState(false)
+  const [resetOrdersConfirm, setResetOrdersConfirm] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'single'>(() => {
+    const saved = localStorage.getItem('viewMode') as 'list' | 'grid' | 'single' | null
+    if (saved) return saved
+    return window.matchMedia('(min-width: 1280px)').matches ? 'grid' : 'list'
+  })
 
   // Auth listener
   useEffect(() => {
@@ -46,7 +55,7 @@ export default function App() {
   useEffect(() => {
     if (!authUser || users.length === 0) return
     recomputeNextOrderer(users)
-  }, [users.map(u => `${u.id}:${u.isPresent}`).join(',')])
+  }, [users.map(u => `${u.id}:${u.isPresent}:${u.balance}`).join(',')])
 
   if (authUser === undefined) {
     return <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -66,7 +75,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className={`${viewMode === 'grid' ? 'max-w-5xl xl:max-w-[1408px]' : viewMode === 'list' ? 'max-w-2xl xl:max-w-[1408px]' : 'max-w-2xl'} mx-auto px-4 py-3 flex items-center gap-3`}>
           <img src="/logo.png" alt="Man Night Pizza" className="h-8 w-8 rounded-md" />
           <div className="flex-1">
             <h1 className="font-bold text-white leading-tight">Man Night Pizza</h1>
@@ -80,10 +89,10 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <main className={`${viewMode === 'grid' ? 'max-w-5xl xl:max-w-[1408px]' : viewMode === 'list' ? 'max-w-2xl xl:max-w-[1408px]' : 'max-w-2xl'} mx-auto px-4 py-5`}>
         {/* Undo banner */}
         {pendingUndo && (
-          <div className="rounded-lg border border-yellow-600/50 bg-yellow-950/30 p-3 flex items-center gap-3">
+          <div className="rounded-lg border border-yellow-600/50 bg-yellow-950/30 p-3 flex items-center gap-3 mb-4">
             <div className="flex-1 text-sm text-yellow-300">
               Order of {formatCurrency(pendingUndo.totalAmount)} processed.
             </div>
@@ -122,20 +131,22 @@ export default function App() {
           </div>
         )}
 
-        {/* Order summary */}
-        <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} />
-
-        {/* Process order button */}
-        {presentCount > 0 && (
-          <div className="pb-2">
-            <button
-              onClick={() => setShowProcessOrder(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3.5 rounded-xl font-bold text-base transition-colors shadow-lg shadow-blue-900/30"
-            >
-              Process Tonight's Order
-            </button>
+        <div className={`${viewMode !== 'single' ? 'xl:flex xl:gap-6 xl:items-start xl:justify-center xl:space-y-0' : ''} space-y-4`}>
+          {/* Left column: order summary + process button */}
+          <div className={`${viewMode === 'grid' ? 'xl:w-96 xl:shrink-0' : viewMode === 'list' ? 'xl:flex-1 xl:max-w-[540px]' : ''} space-y-4`}>
+            <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} />
+            {presentCount > 0 && (
+              <button
+                onClick={() => setShowProcessOrder(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3.5 rounded-xl font-bold text-base transition-colors shadow-lg shadow-blue-900/30"
+              >
+                Process Tonight's Order
+              </button>
+            )}
           </div>
-        )}
+
+          {/* Right column: people + admin */}
+          <div className={`${viewMode !== 'single' ? 'flex-1' : ''} min-w-0 space-y-4${viewMode === 'list' ? ' xl:max-w-[640px]' : ''}`}>
 
         {/* Users list */}
         <div className="space-y-3">
@@ -143,14 +154,39 @@ export default function App() {
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
               People · {presentCount} present
             </h2>
-            {viewerIsAdmin && (
-              <button
-                onClick={() => setEditingUserId(null)}
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium"
-              >
-                + Add person
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+                <button
+                  onClick={() => { setViewMode('single'); localStorage.setItem('viewMode', 'single') }}
+                  className={`hidden xl:block px-2 py-1 rounded text-xs transition-colors ${viewMode === 'single' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  title="Single column"
+                >
+                  ☰
+                </button>
+                <button
+                  onClick={() => { setViewMode('list'); localStorage.setItem('viewMode', 'list') }}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${viewMode === 'list' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  title="Two column"
+                >
+                  ◫
+                </button>
+                <button
+                  onClick={() => { setViewMode('grid'); localStorage.setItem('viewMode', 'grid') }}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${viewMode === 'grid' ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  title="Grid view"
+                >
+                  ⊞
+                </button>
+              </div>
+              {viewerIsAdmin && (
+                <button
+                  onClick={() => setEditingUserId(null)}
+                  className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                >
+                  + Add person
+                </button>
+              )}
+            </div>
           </div>
 
           {users.length === 0 ? (
@@ -163,18 +199,101 @@ export default function App() {
                 Add the first person →
               </button>
             </div>
-          ) : (
-            users.map(user => (
-              <UserCard
-                key={user.id}
-                user={user}
-                isNextOrderer={user.id === appState.nextOrdererId}
-                canEdit={viewerIsAdmin || user.id === currentUser?.id}
-                onEdit={u => setEditingUserId(u.id)}
-              />
-            ))
-          )}
+          ) : (() => {
+            const sorted = [...users].sort((a, b) => {
+              if (a.id === currentUser?.id) return -1
+              if (b.id === currentUser?.id) return 1
+              return 0
+            })
+            return (
+              <>
+                {/* Desktop: respects view mode toggle */}
+                <div className={viewMode === 'grid' ? 'hidden sm:grid sm:grid-cols-2 md:grid-cols-3 gap-3 items-stretch' : 'space-y-3'}>
+                  {sorted.map(user => (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      isNextOrderer={user.id === appState.nextOrdererId}
+                      canEdit={viewerIsAdmin || user.id === currentUser?.id}
+                      compact={viewMode === 'grid'}
+                      onEdit={u => setEditingUserId(u.id)}
+                    />
+                  ))}
+                </div>
+                {/* Mobile: always list view */}
+                {viewMode === 'grid' && (
+                  <div className="sm:hidden space-y-3">
+                    {sorted.map(user => (
+                      <UserCard
+                        key={user.id}
+                        user={user}
+                        isNextOrderer={user.id === appState.nextOrdererId}
+                        canEdit={viewerIsAdmin || user.id === currentUser?.id}
+                        onEdit={u => setEditingUserId(u.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </div>
+
+        {/* Admin actions */}
+        {viewerIsAdmin && (
+          <div className="flex gap-3 pt-2">
+            {resetBalancesConfirm ? (
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-xs text-red-300 flex-1">Reset all balances to £0?</span>
+                <button
+                  onClick={async () => { await resetAllBalances(users); setResetBalancesConfirm(false) }}
+                  className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Yes, reset
+                </button>
+                <button
+                  onClick={() => setResetBalancesConfirm(false)}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : resetOrdersConfirm ? (
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-xs text-red-300 flex-1">Reset all orders to defaults?</span>
+                <button
+                  onClick={async () => { await resetAllOrders(users); setResetOrdersConfirm(false) }}
+                  className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Yes, reset
+                </button>
+                <button
+                  onClick={() => setResetOrdersConfirm(false)}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => setResetBalancesConfirm(true)}
+                  className="flex-1 text-xs bg-gray-800 hover:bg-red-900/50 border border-gray-700 hover:border-red-700 text-gray-400 hover:text-red-300 py-2 rounded-lg transition-colors"
+                >
+                  Reset All Balances
+                </button>
+                <button
+                  onClick={() => setResetOrdersConfirm(true)}
+                  className="flex-1 text-xs bg-gray-800 hover:bg-red-900/50 border border-gray-700 hover:border-red-700 text-gray-400 hover:text-red-300 py-2 rounded-lg transition-colors"
+                >
+                  Reset All Orders
+                </button>
+              </>
+            )}
+          </div>
+        )}
+          </div>{/* end right column */}
+        </div>{/* end lg:flex */}
       </main>
 
       {/* Modals */}
