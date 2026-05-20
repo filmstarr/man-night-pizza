@@ -15,6 +15,8 @@ export interface User {
   currentPizza: PizzaOrder
   isPresent: boolean
   isSharing: boolean
+  isAdmin?: boolean
+  pizzaOverridden?: boolean
   createdAt: number
 }
 

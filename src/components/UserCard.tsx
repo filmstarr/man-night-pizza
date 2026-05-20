@@ -6,12 +6,14 @@ import { PizzaEditor } from './PizzaEditor'
 interface Props {
   user: User
   isNextOrderer: boolean
+  canEdit: boolean
   onEdit: (user: User) => void
 }
 
-export function UserCard({ user, isNextOrderer, onEdit }: Props) {
+export function UserCard({ user, isNextOrderer, canEdit, onEdit }: Props) {
   const [editingPizza, setEditingPizza] = useState(false)
   const [pizza, setPizza] = useState<PizzaOrder>(user.currentPizza)
+  const [pizzaWasReset, setPizzaWasReset] = useState(false)
 
   const balanceColor = user.balance >= 0 ? 'text-green-400' : 'text-red-400'
 
@@ -24,7 +26,7 @@ export function UserCard({ user, isNextOrderer, onEdit }: Props) {
   }
 
   async function handleSavePizza() {
-    await setUserCurrentPizza(user.id, pizza)
+    await setUserCurrentPizza(user.id, pizza, !pizzaWasReset)
     setEditingPizza(false)
   }
 
@@ -71,55 +73,50 @@ export function UserCard({ user, isNextOrderer, onEdit }: Props) {
             <span className={`ml-auto font-mono font-bold ${balanceColor}`}>
               {formatCurrency(user.balance)}
             </span>
-            <button
-              onClick={() => onEdit(user)}
-              className="shrink-0 text-gray-600 hover:text-gray-300 transition-colors text-lg leading-none"
-              title="Edit user"
-            >
-              ⚙️
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => onEdit(user)}
+                className="shrink-0 text-gray-600 hover:text-gray-300 transition-colors text-lg leading-none"
+                title="Edit user"
+              >
+                ⚙️
+              </button>
+            )}
           </div>
 
           {/* Pizza order / sharing */}
-          {user.isSharing ? (
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-sm text-gray-500 italic flex-1">Sharing</span>
-              <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer shrink-0">
-                <input
-                  type="checkbox"
-                  checked={true}
-                  onChange={e => handleSharingToggle(e.target.checked)}
-                  className="accent-blue-500 cursor-pointer"
-                />
-                <span>Sharing</span>
-              </label>
-            </div>
-          ) : !editingPizza ? (
-            <div className="mt-1 flex items-start gap-2">
-              <div className="flex-1 min-w-0 break-words text-sm text-gray-300">
-                {pizzaSummary || <span className="italic text-gray-500">No pizza set</span>}
-                {user.currentPizza.modifications && (
+          {!editingPizza ? (
+            <>
+              <div className="mt-1 min-w-0 break-words text-sm text-gray-300">
+                {user.isSharing
+                  ? <span className="italic text-gray-500">Sharing</span>
+                  : pizzaSummary || <span className="italic text-gray-500">No pizza set</span>
+                }
+                {!user.isSharing && user.currentPizza.modifications && (
                   <span className="text-xs text-gray-500 ml-1">({user.currentPizza.modifications})</span>
                 )}
               </div>
-              <div className="flex flex-col items-start gap-1 shrink-0">
+              {user.currentPizza.sides && (
+                <div className="mt-1 text-xs text-gray-500">Dip: {user.currentPizza.sides}</div>
+              )}
+              <div className="mt-2 flex gap-2">
                 <button
-                  onClick={() => { setPizza(user.currentPizza); setEditingPizza(true) }}
-                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors leading-none"
+                  onClick={() => { setPizza(user.currentPizza); setPizzaWasReset(false); setEditingPizza(true) }}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded transition-colors"
                 >
-                  ✏️ Edit
+                  Edit Order ✏️
                 </button>
-                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                <label className="flex-1 flex items-center justify-center gap-1.5 bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 cursor-pointer py-1.5 rounded transition-colors">
                   <input
                     type="checkbox"
-                    checked={false}
+                    checked={user.isSharing}
                     onChange={e => handleSharingToggle(e.target.checked)}
                     className="accent-blue-500 cursor-pointer"
                   />
                   <span>Sharing</span>
                 </label>
               </div>
-            </div>
+            </>
           ) : (
             <div className="mt-2">
               <PizzaEditor pizza={pizza} onChange={setPizza} compact />
@@ -131,7 +128,7 @@ export function UserCard({ user, isNextOrderer, onEdit }: Props) {
                   Save
                 </button>
                 <button
-                  onClick={() => setPizza(user.defaultPizza)}
+                  onClick={() => { setPizza(user.defaultPizza); setPizzaWasReset(true) }}
                   className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded transition-colors"
                   title="Reset to default pizza"
                 >
@@ -145,10 +142,6 @@ export function UserCard({ user, isNextOrderer, onEdit }: Props) {
                 </button>
               </div>
             </div>
-          )}
-
-          {!user.isSharing && user.currentPizza.sides && !editingPizza && (
-            <div className="mt-1 text-xs text-gray-500">Dip: {user.currentPizza.sides}</div>
           )}
         </div>
       </div>

@@ -30,7 +30,11 @@ export function subscribeToUsers(callback: (users: User[]) => void) {
       if (!Array.isArray(data.emails)) data.emails = []
       return { id: d.id, ...data } as User
     })
-    users.sort((a, b) => a.createdAt - b.createdAt)
+    users.sort((a, b) => {
+      const adminDiff = (b.isAdmin ? 1 : 0) - (a.isAdmin ? 1 : 0)
+      if (adminDiff !== 0) return adminDiff
+      return a.name.localeCompare(b.name)
+    })
     callback(users)
   })
 }
@@ -88,8 +92,8 @@ export async function setUserSharing(id: string, isSharing: boolean) {
   await updateDoc(doc(db, USERS_COLLECTION, id), { isSharing })
 }
 
-export async function setUserCurrentPizza(id: string, pizza: PizzaOrder) {
-  await updateDoc(doc(db, USERS_COLLECTION, id), { currentPizza: pizza })
+export async function setUserCurrentPizza(id: string, pizza: PizzaOrder, overridden = true) {
+  await updateDoc(doc(db, USERS_COLLECTION, id), { currentPizza: pizza, pizzaOverridden: overridden })
 }
 
 export async function adjustBalance(id: string, amount: number) {
@@ -181,7 +185,8 @@ export async function processOrder(
         balance: newBalance,
         currentPizza: u.defaultPizza,
         isPresent: true,
-        isSharing: false
+        isSharing: false,
+        pizzaOverridden: false
       })
     })
 

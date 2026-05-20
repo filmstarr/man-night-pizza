@@ -16,20 +16,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      pwaAssets: {
+        disabled: false,
+        config: true,
+      },
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Man Night Pizza',
-        short_name: 'Pizza Night',
-        description: 'Weekly pizza order tracker for Man Night',
+        short_name: 'Man Night Pizza',
+        description: 'Man Night Pizza',
         theme_color: '#2563eb',
-        background_color: '#1a0a0a',
-        display: 'standalone',
-        icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
-        ]
+        background_color: '#030712',
+        display: 'standalone'
       }
     })
   ]

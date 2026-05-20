@@ -37,3 +37,6 @@ yarn-error.log*
 # Editor
 .vscode/
 *.swp
+
+# AI
+.claude/settings.local.json

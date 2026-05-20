@@ -57,13 +57,17 @@ export default function App() {
   if (!authUser) return <LoginPage />
 
   const presentCount = users.filter(u => u.isPresent && u.name).length
+  const currentUser = users.find(u =>
+    u.emails.some(e => e.toLowerCase() === authUser.email?.toLowerCase())
+  )
+  const viewerIsAdmin = currentUser?.isAdmin ?? false
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <span className="text-xl">🍕</span>
+          <img src="/logo.png" alt="Man Night Pizza" className="h-8 w-8 rounded-md" />
           <div className="flex-1">
             <h1 className="font-bold text-white leading-tight">Man Night Pizza</h1>
           </div>
@@ -139,12 +143,14 @@ export default function App() {
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
               People · {presentCount} present
             </h2>
-            <button
-              onClick={() => setEditingUserId(null)}
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium"
-            >
-              + Add person
-            </button>
+            {viewerIsAdmin && (
+              <button
+                onClick={() => setEditingUserId(null)}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium"
+              >
+                + Add person
+              </button>
+            )}
           </div>
 
           {users.length === 0 ? (
@@ -163,6 +169,7 @@ export default function App() {
                 key={user.id}
                 user={user}
                 isNextOrderer={user.id === appState.nextOrdererId}
+                canEdit={viewerIsAdmin || user.id === currentUser?.id}
                 onEdit={u => setEditingUserId(u.id)}
               />
             ))
@@ -182,6 +189,7 @@ export default function App() {
       {editingUserId !== undefined && (
         <UserModal
           user={editingUserId === null ? null : (users.find(u => u.id === editingUserId) ?? null)}
+          viewerIsAdmin={viewerIsAdmin}
           onClose={() => setEditingUserId(undefined)}
         />
       )}

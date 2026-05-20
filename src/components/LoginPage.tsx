@@ -141,7 +141,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🍕</div>
+          <img src="/logo.png" alt="Man Night Pizza" className="h-24 w-24 rounded-2xl mx-auto mb-1" />
           <h1 className="text-2xl font-bold text-white">Man Night Pizza</h1>
           <p className="text-gray-500 text-sm mt-1">Because you cannot live on snacks alone… just pizza.</p>
         </div>

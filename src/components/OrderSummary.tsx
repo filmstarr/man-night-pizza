@@ -45,7 +45,7 @@ export function OrderSummary({ users, nextOrdererId }: Props) {
               className="text-xs text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 px-2 py-1 rounded transition-colors shrink-0"
               title={`Email ${nextOrderer.name}`}
             >
-              📧 Notify
+              Notify 📬
             </a>
           )}
         </div>
@@ -69,9 +69,9 @@ export function OrderSummary({ users, nextOrdererId }: Props) {
                   <span className="text-gray-300 flex-1">{pizzaLine || <span className="italic text-gray-500">No pizza set</span>}</span>
                 )}
               </div>
-              {!user.isSharing && (user.currentPizza.modifications || user.currentPizza.sides) && (
+              {(user.currentPizza.modifications || user.currentPizza.sides) && (!user.isSharing || user.currentPizza.sides) && (
                 <div className="text-xs text-gray-500 mt-0.5">
-                  {[user.currentPizza.modifications, user.currentPizza.sides && `Dip: ${user.currentPizza.sides}`]
+                  {[!user.isSharing && user.currentPizza.modifications, user.currentPizza.sides && `Dip: ${user.currentPizza.sides}`]
                     .filter(Boolean)
                     .join(' · ')}
                 </div>

@@ -6,10 +6,11 @@ import { PizzaEditor } from './PizzaEditor'
 
 interface Props {
   user?: User | null
+  viewerIsAdmin: boolean
   onClose: () => void
 }
 
-export function UserModal({ user, onClose }: Props) {
+export function UserModal({ user, viewerIsAdmin, onClose }: Props) {
   const isNew = !user
 
   const [name, setName] = useState(user?.name ?? '')
@@ -17,6 +18,7 @@ export function UserModal({ user, onClose }: Props) {
     user?.emails?.length ? user.emails : ['']
   )
   const [newEmail, setNewEmail] = useState('')
+  const [isAdmin, setIsAdmin] = useState(user?.isAdmin ?? false)
   const [defaultPizza, setDefaultPizza] = useState<PizzaOrder>(user?.defaultPizza ?? { ...EMPTY_PIZZA })
   const [balanceAdjust, setBalanceAdjust] = useState('')
   const [previousBalance, setPreviousBalance] = useState<number | null>(null)
@@ -55,14 +57,16 @@ export function UserModal({ user, onClose }: Props) {
           defaultPizza,
           currentPizza: { ...defaultPizza },
           isPresent: true,
-          isSharing: false
+          isSharing: false,
+          isAdmin: viewerIsAdmin ? isAdmin : false
         })
       } else {
         await updateUser(user!.id, {
           name: name.trim(),
           emails: cleanEmails,
           defaultPizza,
-          currentPizza: user!.currentPizza
+          currentPizza: user!.pizzaOverridden ? user!.currentPizza : defaultPizza,
+          ...(viewerIsAdmin ? { isAdmin } : {})
         }, user!.emails)
       }
       onClose()
@@ -186,6 +190,20 @@ export function UserModal({ user, onClose }: Props) {
                 </div>
               </div>
 
+              {viewerIsAdmin && (
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isAdmin}
+                      onChange={e => setIsAdmin(e.target.checked)}
+                      className="w-4 h-4 accent-blue-500 cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-gray-300">Admin</span>
+                  </label>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Default Pizza Order</label>
                 <PizzaEditor pizza={defaultPizza} onChange={setDefaultPizza} showErrors={showErrors} />
@@ -234,7 +252,7 @@ export function UserModal({ user, onClose }: Props) {
         </div>
 
         <div className="p-5 border-t border-gray-700 space-y-2">
-          {!isNew && tab === 'details' && (
+          {!isNew && tab === 'details' && viewerIsAdmin && (
             confirmDelete ? (
               <div className="flex gap-2">
                 <button
