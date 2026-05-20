@@ -78,7 +78,7 @@ export default function App() {
         <div className={`${viewMode === 'grid' ? 'max-w-5xl xl:max-w-[1408px]' : viewMode === 'list' ? 'max-w-2xl xl:max-w-[1408px]' : 'max-w-2xl'} mx-auto px-4 py-3 flex items-center gap-3`}>
           <img src="/logo.png" alt="Man Night Pizza" className="h-8 w-8 rounded-md" />
           <div className="flex-1">
-            <h1 className="font-bold text-white leading-tight">Man Night Pizza</h1>
+            <h1 className="text-2xl font-bold text-white leading-tight">Man Night Pizza</h1>
           </div>
           <button
             onClick={() => signOut(auth)}

@@ -51,32 +51,31 @@ export function OrderSummary({ users, nextOrdererId }: Props) {
         </div>
       )}
 
-      <div className="space-y-2">
-        {presentUsers.map(user => {
+      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {presentUsers.map((user, i) => {
           const pizzaLine = [user.currentPizza.name, user.currentPizza.size, user.currentPizza.base]
             .filter(Boolean)
             .join(' · ')
 
+          const extras = [
+            !user.isSharing && user.currentPizza.modifications,
+            user.currentPizza.sides && `Dip: ${user.currentPizza.sides}`,
+          ].filter(Boolean).join(' · ')
+
           return (
-            <div key={user.id} className="text-sm">
-              <div className="flex items-baseline gap-2">
-                <span className={`font-medium ${user.id === nextOrdererId ? 'text-pink-300' : 'text-white'}`}>
-                  {user.name}:
-                </span>
-                {user.isSharing ? (
-                  <span className="italic text-gray-500">Sharing</span>
-                ) : (
-                  <span className="text-gray-300 flex-1">{pizzaLine || <span className="italic text-gray-500">No pizza set</span>}</span>
-                )}
-              </div>
-              {(user.currentPizza.modifications || user.currentPizza.sides) && (!user.isSharing || user.currentPizza.sides) && (
-                <div className="text-xs text-gray-500 mt-0.5">
-                  {[!user.isSharing && user.currentPizza.modifications, user.currentPizza.sides && `Dip: ${user.currentPizza.sides}`]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </div>
+            <>
+              <span key={`${user.id}-name`} className={`text-sm font-medium ${i > 0 ? 'mt-2' : ''} ${user.id === nextOrdererId ? 'text-pink-300' : 'text-white'}`}>
+                {user.name}
+              </span>
+              {user.isSharing ? (
+                <span key={`${user.id}-pizza`} className={`text-xs italic text-gray-500 ${i > 0 ? 'mt-2' : ''}`}>Sharing</span>
+              ) : (
+                <span key={`${user.id}-pizza`} className={`text-xs text-gray-300 ${i > 0 ? 'mt-2' : ''}`}>{pizzaLine || <span className="italic text-gray-500">No pizza set</span>}</span>
               )}
-            </div>
+              {extras && (
+                <div key={`${user.id}-extras`} className="col-span-2 text-xs text-gray-500 -mt-0.5 mb-0.5">{extras}</div>
+              )}
+            </>
           )
         })}
       </div>
