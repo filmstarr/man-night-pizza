@@ -136,12 +136,14 @@ export default function App() {
           <div className={`${viewMode === 'grid' ? 'xl:w-96 xl:shrink-0' : viewMode === 'list' ? 'xl:flex-1 xl:max-w-[540px]' : ''} space-y-4`}>
             <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} />
             {presentCount > 0 && (
-              <button
-                onClick={() => setShowProcessOrder(true)}
-                className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3.5 rounded-xl font-bold text-base transition-colors shadow-lg shadow-blue-900/30"
-              >
-                Process Tonight's Order
-              </button>
+              <div>
+                <button
+                  onClick={() => setShowProcessOrder(true)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3.5 rounded-xl font-bold text-base transition-colors shadow-lg shadow-blue-900/30 mt-2 mb-4"
+                >
+                  Process Tonight's Order
+                </button>
+              </div>
             )}
           </div>
 
