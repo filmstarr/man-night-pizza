@@ -144,7 +144,7 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
 
       {showFullscreen && (
         <div
-          className="fixed inset-0 z-50 bg-gray-950 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-gray-950 overflow-y-auto !mt-0"
           onClick={() => setShowFullscreen(false)}
         >
           <div className="max-w-lg mx-auto px-6 py-8" onClick={e => e.stopPropagation()}>

@@ -5,7 +5,6 @@ export function useSwUpdate() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
-    // Only show banner if a SW was already in control (i.e. this is an update, not first install)
     const hadController = Boolean(navigator.serviceWorker.controller)
     const handleControllerChange = () => {
       if (hadController) setUpdated(true)
@@ -14,11 +13,9 @@ export function useSwUpdate() {
     return () => navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
   }, [])
 
-  useEffect(() => {
-    if (!updated) return
-    const t = setTimeout(() => setUpdated(false), 4000)
-    return () => clearTimeout(t)
-  }, [updated])
+  function reload() {
+    window.location.reload()
+  }
 
-  return updated
+  return { updated, reload }
 }

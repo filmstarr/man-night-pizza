@@ -18,6 +18,15 @@ export interface User {
   isAdmin?: boolean
   pizzaOverridden?: boolean
   fcmTokens?: string[]
+  chatNotificationsEnabled?: boolean
+  lastReadAt?: number
+  createdAt: number
+}
+
+export interface ChatMessage {
+  id: string
+  userId: string
+  text: string
   createdAt: number
 }
 

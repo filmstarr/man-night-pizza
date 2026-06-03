@@ -7,16 +7,22 @@ import {
   onSnapshot,
   getDoc,
   getDocs,
+  addDoc,
+  query,
+  orderBy,
+  limitToLast,
+  endBefore,
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore'
 import { db, createAuthAccount } from './firebase'
-import type { User, AppState, PizzaOrder, OrderSnapshot } from '../types'
+import type { User, AppState, PizzaOrder, OrderSnapshot, ChatMessage } from '../types'
 import { EMPTY_PIZZA } from '../types'
 
 const USERS_COLLECTION = 'users'
 const ALLOWED_EMAILS_COLLECTION = 'allowedEmails'
 const APP_STATE_DOC = 'appState/main'
+const MESSAGES_COLLECTION = 'messages'
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +115,10 @@ export async function saveFcmToken(userId: string, token: string): Promise<void>
 
 export async function removeFcmToken(userId: string, token: string): Promise<void> {
   await updateDoc(doc(db, USERS_COLLECTION, userId), { fcmTokens: arrayRemove(token) })
+}
+
+export async function setChatNotificationsEnabled(userId: string, enabled: boolean): Promise<void> {
+  await updateDoc(doc(db, USERS_COLLECTION, userId), { chatNotificationsEnabled: enabled })
 }
 
 export async function isEmailAllowed(email: string): Promise<boolean> {
@@ -255,6 +265,42 @@ export async function recomputeNextOrderer(users: User[]) {
 }
 
 
+
+// ─── Chat Messages ───────────────────────────────────────────────────────────
+
+export function subscribeToMessages(callback: (messages: ChatMessage[]) => void) {
+  return onSnapshot(
+    query(collection(db, MESSAGES_COLLECTION), orderBy('createdAt', 'asc'), limitToLast(100)),
+    snapshot => {
+      callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)))
+    }
+  )
+}
+
+export async function loadMoreMessages(beforeTimestamp: number): Promise<ChatMessage[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, MESSAGES_COLLECTION),
+      orderBy('createdAt', 'asc'),
+      endBefore(beforeTimestamp),
+      limitToLast(100)
+    )
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage))
+}
+
+export async function sendMessage(userId: string, text: string): Promise<void> {
+  await addDoc(collection(db, MESSAGES_COLLECTION), { userId, text, createdAt: Date.now() })
+}
+
+export async function markMessagesRead(userId: string): Promise<void> {
+  await updateDoc(doc(db, USERS_COLLECTION, userId), { lastReadAt: Date.now() })
+}
+
+export async function clearMessages(): Promise<void> {
+  const snap = await getDocs(collection(db, MESSAGES_COLLECTION))
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
