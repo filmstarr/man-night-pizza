@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import type { User as FirebaseUser } from 'firebase/auth'
-import { auth } from './lib/firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { auth, app } from './lib/firebase'
 import {
   subscribeToUsers,
   subscribeToAppState,
@@ -18,6 +19,9 @@ import { UserCard } from './components/UserCard'
 import { OrderSummary } from './components/OrderSummary'
 import { ProcessOrderModal } from './components/ProcessOrderModal'
 import { UserModal } from './components/UserModal'
+import { NotificationBanner } from './components/NotificationBanner'
+import { useNotificationPermission } from './hooks/useNotificationPermission'
+import { useSwUpdate } from './hooks/useSwUpdate'
 
 export default function App() {
   const [authUser, setAuthUser] = useState<FirebaseUser | null | undefined>(undefined)
@@ -34,6 +38,18 @@ export default function App() {
     if (saved) return saved
     return window.matchMedia('(min-width: 1280px)').matches ? 'grid' : 'list'
   })
+  const appUpdated = useSwUpdate()
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => localStorage.getItem('notifBannerDismissed') === 'true'
+  )
+
+  // Clear app badge when app is visible
+  useEffect(() => {
+    const clear = () => { if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(() => {}) }
+    clear()
+    document.addEventListener('visibilitychange', clear)
+    return () => document.removeEventListener('visibilitychange', clear)
+  }, [])
 
   // Auth listener
   useEffect(() => {
@@ -57,6 +73,58 @@ export default function App() {
     recomputeNextOrderer(users)
   }, [users.map(u => `${u.id}:${u.isPresent}:${u.balance}`).join(',')])
 
+  const currentUser = authUser
+    ? users.find(u => u.emails.some(e => e.toLowerCase() === authUser.email?.toLowerCase()))
+    : undefined
+
+  const { permissionState, requestPermission, enrolling } = useNotificationPermission(currentUser)
+
+  const usersRef = useRef(users)
+  useEffect(() => { usersRef.current = users }, [users])
+
+  const prevNextOrdererIdRef = useRef<string | null | undefined>(undefined)
+  const [absentOrderer, setAbsentOrderer] = useState<User | null>(null)
+
+  useEffect(() => {
+    const current = appState.nextOrdererId
+    const prev = prevNextOrdererIdRef.current
+    if (prev !== undefined && prev !== null && prev !== current) {
+      const prevUser = usersRef.current.find(u => u.id === prev)
+      if (prevUser && !prevUser.isPresent) setAbsentOrderer(prevUser)
+      else setAbsentOrderer(null)
+    }
+    prevNextOrdererIdRef.current = current
+  }, [appState.nextOrdererId])
+
+  const fns = useMemo(() => getFunctions(app, 'europe-west1'), [])
+  const handleNotify = useCallback(async (orderer: User) => {
+    const sendNotification = httpsCallable<
+      { userId: string; senderName?: string; absentUserId?: string },
+      { success: boolean; ordererHasNoTokens: boolean }
+    >(fns, 'sendOrderNotification')
+    const result = await sendNotification({
+      userId: orderer.id,
+      senderName: currentUser?.name,
+      absentUserId: absentOrderer?.id
+    })
+    setAbsentOrderer(null)
+    if (result.data.ordererHasNoTokens) throw new Error('no_tokens')
+  }, [fns, currentUser, absentOrderer])
+
+  const handleTestNotify = useCallback(async () => {
+    const sendTest = httpsCallable(fns, 'sendTestNotification')
+    await sendTest({})
+  }, [fns])
+
+  const handleProcessed = useCallback((snapshot: OrderSnapshot) => {
+    setPendingUndo(snapshot)
+    setShowProcessOrder(false)
+    httpsCallable(fns, 'sendOrderProcessedNotification')({
+      payerId: snapshot.payerId,
+      totalAmount: snapshot.totalAmount
+    }).catch(() => {})
+  }, [fns])
+
   if (authUser === undefined) {
     return <div className="min-h-screen bg-gray-950 flex items-center justify-center">
       <div className="text-gray-500 text-sm">Loading…</div>
@@ -66,9 +134,6 @@ export default function App() {
   if (!authUser) return <LoginPage />
 
   const presentCount = users.filter(u => u.isPresent && u.name).length
-  const currentUser = users.find(u =>
-    u.emails.some(e => e.toLowerCase() === authUser.email?.toLowerCase())
-  )
   const viewerIsAdmin = currentUser?.isAdmin ?? false
 
   return (
@@ -90,6 +155,22 @@ export default function App() {
       </header>
 
       <main className={`${viewMode === 'grid' ? 'max-w-5xl xl:max-w-[1408px]' : viewMode === 'list' ? 'max-w-2xl xl:max-w-[1408px]' : 'max-w-2xl'} mx-auto px-4 py-5`}>
+        {/* App update banner */}
+        {appUpdated && (
+          <div className="rounded-lg border border-green-700/50 bg-green-950/30 p-3 flex items-center gap-3 mb-4">
+            <span className="text-sm text-green-300">App updated to the latest version ✓</span>
+          </div>
+        )}
+
+        {/* Notification permission banner */}
+        {permissionState === 'default' && !bannerDismissed && (
+          <NotificationBanner
+            onEnable={requestPermission}
+            onDismiss={() => { setBannerDismissed(true); localStorage.setItem('notifBannerDismissed', 'true') }}
+            loading={enrolling}
+          />
+        )}
+
         {/* Undo banner */}
         {pendingUndo && (
           <div className="rounded-lg border border-yellow-600/50 bg-yellow-950/30 p-3 flex items-center gap-3 mb-4">
@@ -134,7 +215,7 @@ export default function App() {
         <div className={`${viewMode !== 'single' ? 'xl:flex xl:gap-6 xl:items-start xl:justify-center xl:space-y-0' : ''} space-y-4`}>
           {/* Left column: order summary + process button */}
           <div className={`${viewMode === 'grid' ? 'xl:w-96 xl:shrink-0' : viewMode === 'list' ? 'xl:flex-1 xl:max-w-[540px]' : ''} space-y-4`}>
-            <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} />
+            <OrderSummary users={users} nextOrdererId={appState.nextOrdererId} onNotify={handleNotify} onTestNotify={viewerIsAdmin ? handleTestNotify : undefined} />
             {presentCount > 0 && (
               <div>
                 <button
@@ -304,7 +385,7 @@ export default function App() {
           users={users}
           nextOrdererId={appState.nextOrdererId}
           onClose={() => setShowProcessOrder(false)}
-          onProcessed={snapshot => { setPendingUndo(snapshot); setShowProcessOrder(false) }}
+          onProcessed={handleProcessed}
         />
       )}
       {editingUserId !== undefined && (

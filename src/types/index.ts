@@ -17,6 +17,7 @@ export interface User {
   isSharing: boolean
   isAdmin?: boolean
   pizzaOverridden?: boolean
+  fcmTokens?: string[]
   createdAt: number
 }
 

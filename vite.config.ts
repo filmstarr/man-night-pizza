@@ -7,7 +7,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/messaging', 'firebase/functions'],
           react: ['react', 'react-dom']
         }
       }
@@ -16,6 +16,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       pwaAssets: {
         disabled: false,
         config: true,

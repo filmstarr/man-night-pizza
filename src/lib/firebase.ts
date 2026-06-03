@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getMessaging, getToken } from 'firebase/messaging'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,6 +15,38 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+
+async function getFcmToken(): Promise<string | null> {
+  const messaging = getMessaging(app)
+  const swReg = await navigator.serviceWorker.ready
+  return await getToken(messaging, {
+    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+    serviceWorkerRegistration: swReg
+  }) ?? null
+}
+
+export async function requestNotificationToken(): Promise<string | null> {
+  if (!('Notification' in window)) return null
+  try {
+    return await getFcmToken()
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      // "push service error" = OS/browser blocking push, not fixable by retrying
+      if (err.message.toLowerCase().includes('push service')) return null
+      // Otherwise assume stale subscription from a previous VAPID key — clear and retry once
+      try {
+        const swReg = await navigator.serviceWorker.ready
+        const sub = await swReg.pushManager.getSubscription()
+        if (sub) await sub.unsubscribe()
+        return await getFcmToken()
+      } catch {
+        return null
+      }
+    }
+    console.error('[FCM] getToken failed:', err)
+    return null
+  }
+}
 
 // Secondary app instance used to create Auth accounts without signing out
 // the currently logged-in admin.

@@ -6,7 +6,9 @@ import {
   deleteDoc,
   onSnapshot,
   getDoc,
-  getDocs
+  getDocs,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore'
 import { db, createAuthAccount } from './firebase'
 import type { User, AppState, PizzaOrder, OrderSnapshot } from '../types'
@@ -99,6 +101,14 @@ export async function adjustBalance(id: string, amount: number) {
   await updateDoc(doc(db, USERS_COLLECTION, id), {
     balance: Math.round((user.balance + amount) * 100) / 100
   })
+}
+
+export async function saveFcmToken(userId: string, token: string): Promise<void> {
+  await updateDoc(doc(db, USERS_COLLECTION, userId), { fcmTokens: arrayUnion(token) })
+}
+
+export async function removeFcmToken(userId: string, token: string): Promise<void> {
+  await updateDoc(doc(db, USERS_COLLECTION, userId), { fcmTokens: arrayRemove(token) })
 }
 
 export async function isEmailAllowed(email: string): Promise<boolean> {
