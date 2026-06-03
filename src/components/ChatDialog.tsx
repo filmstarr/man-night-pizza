@@ -127,6 +127,9 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       const scroll = scrollRef.current
       if (!el) return
 
+      // When pinned, React's style prop (height:100dvh) handles sizing — don't touch it
+      if (pinned) return
+
       // 1. Sample before layout changes
       const prevScrollTop = scroll?.scrollTop ?? 0
       const prevClientHeight = scroll?.clientHeight ?? 0
@@ -160,7 +163,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
     }
-  }, [])
+  }, [pinned])
 
   // Scroll to bottom on first render, and when a new message arrives if own or near bottom.
   useEffect(() => {

@@ -94,7 +94,7 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
                 onClick={handleNotify}
                 disabled={notifying}
                 className="text-xs text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                title={`Notify ${nextOrderer.name}`}
+                title={`Notify users who's next`}
               >
                 {notified ? '✓' : notifying ? '…' : 'Notify 📬'}
               </button>
