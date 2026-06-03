@@ -105,7 +105,10 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
     const el = containerRef.current
     if (!el || pinned) return
     const prevent = (e: TouchEvent) => {
-      if (!scrollRef.current?.contains(e.target as Node)) {
+      const scroll = scrollRef.current
+      const insideScroll = scroll?.contains(e.target as Node)
+      // Prevent if outside the scroll area, or inside it but nothing to scroll
+      if (!insideScroll || (scroll && scroll.scrollHeight <= scroll.clientHeight)) {
         e.preventDefault()
       }
     }

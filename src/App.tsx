@@ -502,7 +502,7 @@ export default function App() {
                   onClick={() => setResetBalancesConfirm(true)}
                   className="flex-1 text-xs bg-gray-800 hover:bg-red-900/50 border border-gray-700 hover:border-red-700 text-gray-400 hover:text-red-300 py-2 rounded-lg transition-colors"
                 >
-                  Reset All Balances
+                  Reset Balances
                 </button>
                 <button
                   onClick={() => setResetOrdersConfirm(true)}
