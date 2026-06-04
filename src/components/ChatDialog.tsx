@@ -27,10 +27,13 @@ interface Props {
   permissionState: NotificationPermission | 'unsupported' | 'unknown'
   requestPermission: () => Promise<void>
   onMessageSent: (senderName: string, text: string) => void
+  draft?: string
+  onDraftChange?: (draft: string) => void
 }
 
-export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, onClose, permissionState, requestPermission, onMessageSent }: Props) {
-  const [text, setText] = useState('')
+export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, onClose, permissionState, requestPermission, onMessageSent, draft = '', onDraftChange }: Props) {
+  const [text, setText] = useState(draft)
+  const updateText = (value: string) => { setText(value); onDraftChange?.(value) }
   const [sending, setSending] = useState(false)
   // Single accumulator — messages only ever get added, never removed
   const [allMessages, setAllMessages] = useState<ChatMessage[]>(() => [...messages])
@@ -235,7 +238,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
     const trimmed = text.trim()
     try {
       await sendMessage(currentUser.id, trimmed)
-      setText('')
+      updateText('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       onMessageSent(currentUser.name, trimmed)
     } finally {
@@ -422,7 +425,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
           rows={1}
           value={text}
           onChange={e => {
-            setText(e.target.value)
+            updateText(e.target.value)
             e.target.style.height = 'auto'
             e.target.style.height = `${e.target.scrollHeight}px`
           }}

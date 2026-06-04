@@ -50,6 +50,7 @@ export default function App() {
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [showChat, setShowChat] = useState(false)
+  const [chatDraft, setChatDraft] = useState('')
   const [chatPinned, setChatPinned] = useState(() => localStorage.getItem('chatPinned') === 'true')
   const [isLargeScreen, setIsLargeScreen] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   useEffect(() => {
@@ -559,6 +560,8 @@ export default function App() {
           permissionState={permissionState}
           requestPermission={requestPermission}
           onMessageSent={handleChatMessageSent}
+          draft={chatDraft}
+          onDraftChange={setChatDraft}
         />
       )}
     </div>
