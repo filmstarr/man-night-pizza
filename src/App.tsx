@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import type { User as FirebaseUser } from 'firebase/auth'
 import { getFunctions, httpsCallable } from 'firebase/functions'
+import { getMessaging, onMessage } from 'firebase/messaging'
 import { auth, app } from './lib/firebase'
 import {
   subscribeToUsers,
@@ -153,6 +154,19 @@ export default function App() {
     : undefined
 
   const { permissionState, requestPermission, enrolling } = useNotificationPermission(currentUser)
+
+  // Show notifications while the tab is focused — onBackgroundMessage in the SW only fires for background pages
+  useEffect(() => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    const unsub = onMessage(getMessaging(app), async payload => {
+      const title = payload.data?.['title'] ?? 'Man Night Pizza'
+      const body = payload.data?.['body'] ?? ''
+      const type = payload.data?.['type'] ?? ''
+      const swReg = await navigator.serviceWorker.ready
+      swReg.showNotification(title, { body, icon: '/logo.png', badge: '/logo.png', data: { type } })
+    })
+    return unsub
+  }, [permissionState])
 
   const usersRef = useRef(users)
   useEffect(() => { usersRef.current = users }, [users])
