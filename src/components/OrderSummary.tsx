@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react'
+import { useState } from 'react'
 import type { User } from '../types'
 
 function buildNotifyHref(orderer: User): string {
@@ -12,7 +12,111 @@ function buildNotifyHref(orderer: User): string {
 
 function pizzaLine(user: User): string {
   return [user.currentPizza.name, user.currentPizza.size, user.currentPizza.base]
-    .filter(Boolean).join(' · ')
+    .filter(Boolean).join(' | ')
+}
+
+function parseModifications(mods: string): { plain: string[], removals: string[], additions: string[] } {
+  const plain: string[] = [], removals: string[] = [], additions: string[] = []
+  const tokens = mods.match(/[+-][^,+-]*|[^,+-]+/g) || []
+  for (const token of tokens.map(s => s.trim()).filter(Boolean)) {
+    if (token.startsWith('+')) additions.push(token.slice(1).trim())
+    else if (token.startsWith('-')) removals.push(token.slice(1).trim())
+    else plain.push(token)
+  }
+  return { plain, removals, additions }
+}
+
+function aggregateSides(users: User[]): { name: string, count: number }[] {
+  const counts = new Map<string, { display: string, count: number }>()
+  for (const u of users) {
+    const side = u.currentPizza.sides?.trim().replace(/\s*dip\s*$/i, '').trim()
+    if (!side || u.isSharing) continue
+    const key = side.toLowerCase()
+    const existing = counts.get(key)
+    counts.set(key, { display: existing?.display ?? side, count: (existing?.count ?? 0) + 1 })
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count).map(({ display, count }) => ({ name: display, count }))
+}
+
+function PersonCard({ user, nextOrdererId, compact }: { user: User, nextOrdererId: string | null, compact?: boolean }) {
+  const line = pizzaLine(user)
+  const mods = !user.isSharing ? (user.currentPizza.modifications || '') : ''
+  const { plain, removals, additions } = parseModifications(mods)
+  const isOrderer = user.id === nextOrdererId
+
+  return (
+    <div className="flex gap-0 items-stretch rounded-lg bg-gray-700/40">
+      <div className={`flex items-start rounded-l-lg ${isOrderer ? 'bg-pink-800' : 'bg-blue-600'} p-2.5`} style={{ width: '3.5rem' }}>
+        <span className={`font-bold text-white text-center leading-tight ${compact ? 'text-xs' : 'text-sm'}`} style={{ writingMode: 'horizontal-tb' }}>
+          {user.name}
+        </span>
+      </div>
+      <div className={`flex-1 min-w-0 p-2.5`}>
+        {user.isSharing ? (
+          <p className={`italic text-gray-500 ${compact ? 'text-xs' : 'text-sm'}`}>Sharing</p>
+        ) : compact ? (
+          <>
+            <p className="text-xs text-gray-300">
+              {line || <span className="italic text-gray-500">No pizza set</span>}
+            </p>
+            {(plain.length > 0 || removals.length > 0 || additions.length > 0) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs">
+                {plain.length > 0 && (
+                  <span className="text-gray-400">{plain.join(', ')}</span>
+                )}
+                {removals.length > 0 && (
+                  <span className="flex items-center gap-1 text-gray-400">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="7" cy="7" r="7" fill="#ef4444"/>
+                      <line x1="4" y1="7" x2="10" y2="7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    {removals.join(', ')}
+                  </span>
+                )}
+                {additions.length > 0 && (
+                  <span className="flex items-center gap-1 text-gray-400">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="7" cy="7" r="7" fill="#16a34a"/>
+                      <line x1="7" y1="4" x2="7" y2="10" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="4" y1="7" x2="10" y2="7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    {additions.join(', ')}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="space-y-0.5 text-sm">
+            {user.currentPizza.name && <p className="text-gray-200 font-bold">{user.currentPizza.name}</p>}
+            {user.currentPizza.size && <p className="text-gray-300">{user.currentPizza.size}</p>}
+            {user.currentPizza.base && <p className="text-gray-300">{user.currentPizza.base}</p>}
+            {plain.length > 0 && <p className="text-gray-300">{plain.join(', ')}</p>}
+            {removals.length > 0 && (
+              <span className="flex items-center gap-1 text-gray-300">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="7" cy="7" r="7" fill="#ef4444"/>
+                  <line x1="4" y1="7" x2="10" y2="7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                {removals.join(', ')}
+              </span>
+            )}
+            {additions.length > 0 && (
+              <span className="flex items-center gap-1 text-gray-300">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="7" cy="7" r="7" fill="#16a34a"/>
+                  <line x1="7" y1="4" x2="7" y2="10" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="4" y1="7" x2="10" y2="7" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                {additions.join(', ')}
+              </span>
+            )}
+            {!user.currentPizza.name && <p className="italic text-gray-500">No pizza set</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 interface Props {
@@ -33,7 +137,7 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
 
   if (presentUsers.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800 p-4">
+      <div>
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Summary</h2>
         <p className="text-sm text-gray-500 italic">No one is marked as present yet.</p>
       </div>
@@ -41,6 +145,7 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
   }
 
   const nextOrderer = presentUsers.find(u => u.id === nextOrdererId)
+  const sides = aggregateSides(presentUsers)
 
   async function handleTestNotify() {
     if (!onTestNotify || testing) return
@@ -74,72 +179,79 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
     }
   }
 
+  const NotifyButtons = ({ stopProp }: { stopProp?: boolean }) => (
+    <div
+      className="flex gap-1 shrink-0"
+      onClick={stopProp ? e => e.stopPropagation() : undefined}
+    >
+      {nextOrderer && (
+        <button
+          onClick={handleNotify}
+          disabled={notifying}
+          className="text-xs text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 px-2 py-1 rounded transition-colors disabled:opacity-50"
+          title="Notify who's ordering next"
+        >
+          {notified ? '✓' : notifying ? '…' : 'Notify 📬'}
+        </button>
+      )}
+      {onTestNotify && (
+        <button
+          onClick={handleTestNotify}
+          disabled={testing}
+          className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 px-2 py-1 rounded transition-colors disabled:opacity-50"
+          title="Send test notification to admins"
+        >
+          {tested ? '✓' : testing ? '…' : 'Test 🔔'}
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <>
       <div
-        className="rounded-lg border border-gray-700 bg-gray-800 p-4 cursor-pointer select-none"
+        className="cursor-pointer select-none"
         onClick={() => setShowFullscreen(true)}
       >
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Order Summary · {presentUsers.length} {presentUsers.length === 1 ? 'person' : 'people'}
-        </h2>
-
-        {nextOrderer && (
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <span className="text-sm text-pink-300 font-medium">
-              🍕 {nextOrderer.name} is ordering next
+        <div className="mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Order Summary</h2>
+            <NotifyButtons stopProp />
+          </div>
+          <div className="flex items-center gap-2 text-sm flex-wrap">
+            <span className="text-gray-400">
+              Attendance: <span className="text-white font-medium">{presentUsers.length} {presentUsers.length === 1 ? 'Person' : 'People'}</span>
             </span>
-            <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={handleNotify}
-                disabled={notifying}
-                className="text-xs text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                title={`Notify users who's next`}
-              >
-                {notified ? '✓' : notifying ? '…' : 'Notify 📬'}
-              </button>
-              {onTestNotify && (
-                <button
-                  onClick={handleTestNotify}
-                  disabled={testing}
-                  className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                  title="Send test notification to admins"
-                >
-                  {tested ? '✓' : testing ? '…' : 'Test 🔔'}
-                </button>
-              )}
+            {nextOrderer && (
+              <>
+                <span className="text-gray-600">|</span>
+                <span className="text-gray-400">
+                  Orderer: <span className="text-pink-300 font-medium">{nextOrderer.name}</span>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {presentUsers.map(user => (
+            <PersonCard key={user.id} user={user} nextOrdererId={nextOrdererId} compact />
+          ))}
+        </div>
+
+        {sides.length > 0 && (
+          <div className="flex gap-3 items-start rounded-lg border border-blue-600 p-2.5 mt-2">
+            <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-gray-300">Sides</span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-300">
+                {sides.map(s => `${s.count} x ${s.name} dip`).join(', ')}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">+ wedges, cookies, etc.</p>
             </div>
           </div>
         )}
-
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-          {presentUsers.map((user, i) => {
-            const line = pizzaLine(user)
-            const extras = [
-              !user.isSharing && user.currentPizza.modifications,
-              user.currentPizza.sides && `Dip: ${user.currentPizza.sides}`,
-            ].filter(Boolean).join(' · ')
-
-            return (
-              <Fragment key={user.id}>
-                <span className={`text-sm font-medium ${i > 0 ? 'mt-2' : ''} ${user.id === nextOrdererId ? 'text-pink-300' : 'text-white'}`}>
-                  {user.name}
-                </span>
-                {user.isSharing ? (
-                  <span className={`text-xs italic text-gray-500 ${i > 0 ? 'mt-2' : ''}`}>Sharing</span>
-                ) : (
-                  <span className={`text-xs text-gray-300 ${i > 0 ? 'mt-2' : ''}`}>{line || <span className="italic text-gray-500">No pizza set</span>}</span>
-                )}
-                {extras && (
-                  <div className="col-span-2 text-xs text-gray-500 -mt-0.5 mb-0.5">{extras}</div>
-                )}
-              </Fragment>
-            )
-          })}
-        </div>
-        <div className="mt-3 pt-3 border-t border-gray-700 text-xs text-gray-500">
-          + sides, cookies, etc.
-        </div>
       </div>
 
       {showFullscreen && (
@@ -148,48 +260,53 @@ export function OrderSummary({ users, nextOrdererId, onNotify, onTestNotify }: P
           onClick={() => setShowFullscreen(false)}
         >
           <div className="max-w-lg mx-auto px-6 py-8" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-base sm:text-sm font-semibold text-gray-400 uppercase tracking-wider">Order Summary</h2>
-              <button
-                onClick={() => setShowFullscreen(false)}
-                className="text-gray-500 hover:text-white transition-colors text-3xl sm:text-xl leading-none p-1 -mr-1"
-              >
-                ✕
-              </button>
+            <div className="mb-6">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h2 className="text-base font-semibold text-gray-400 uppercase tracking-wider">Order Summary</h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <NotifyButtons />
+                  <button
+                    onClick={() => setShowFullscreen(false)}
+                    className="text-gray-500 hover:text-white transition-colors text-3xl sm:text-xl leading-none p-1 -mr-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-gray-400">
+                  Attendance: <span className="text-white font-medium">{presentUsers.length} {presentUsers.length === 1 ? 'Person' : 'People'}</span>
+                </span>
+                {nextOrderer && (
+                  <>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-gray-400">
+                      Orderer: <span className="text-pink-300 font-medium">{nextOrderer.name}</span>
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
-            {nextOrderer && (
-              <div className="mb-8 p-4 rounded-xl bg-pink-950/30 border border-pink-700/50">
-                <p className="text-pink-300 text-2xl font-bold">🍕 {nextOrderer.name} is ordering</p>
+            <div className="space-y-3">
+              {presentUsers.map(user => (
+                <PersonCard key={user.id} user={user} nextOrdererId={nextOrdererId} />
+              ))}
+            </div>
+
+            {sides.length > 0 && (
+              <div className="flex gap-3 items-start rounded-lg border border-blue-600 p-4 mt-3">
+                <div className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-gray-300">Sides</span>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-300">
+                    {sides.map(s => `${s.count} x ${s.name} dip`).join(', ')}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-0.5">+ wedges, cookies, etc.</p>
+                </div>
               </div>
             )}
-
-            <div className="space-y-6">
-              {presentUsers.map(user => {
-                const line = pizzaLine(user)
-                const mods = !user.isSharing ? user.currentPizza.modifications : ''
-                const sides = user.currentPizza.sides
-
-                return (
-                  <div key={user.id} className="pb-6 border-b border-gray-800 last:border-0">
-                    <p className={`text-2xl font-bold mb-1 ${user.id === nextOrdererId ? 'text-pink-300' : 'text-white'}`}>
-                      {user.name}
-                    </p>
-                    {user.isSharing ? (
-                      <p className="text-gray-400 text-lg">Sharing</p>
-                    ) : (
-                      <>
-                        <p className="text-xl text-gray-200">{line || <span className="italic text-gray-500">No pizza set</span>}</p>
-                        {mods && <p className="text-lg text-gray-400 mt-1">{mods}</p>}
-                        {sides && <p className="text-lg text-gray-400">{sides}</p>}
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <p className="mt-6 text-gray-500 text-lg">+ sides, cookies, etc.</p>
           </div>
         </div>
       )}

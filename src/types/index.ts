@@ -50,11 +50,11 @@ export interface UserSnapshot {
 
 export const EMPTY_PIZZA: PizzaOrder = {
   name: '',
-  size: 'Small 9.5"',
+  size: 'Small',
   base: 'Italian Style',
   modifications: '',
   sides: ''
 }
 
-export const PIZZA_SIZES = ['Small 9.5"', 'Medium 11.5"', 'Large 13.5"']
+export const PIZZA_SIZES = ['Small', 'Medium', 'Large']
 export const PIZZA_BASES = ['Classic Crust', 'Stuffed Crust', 'Italian Style', 'Thin & Crispy', 'Double Decadence']

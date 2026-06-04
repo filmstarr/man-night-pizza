@@ -39,7 +39,7 @@ export function PizzaEditor({ pizza, onChange, compact = false, showErrors = fal
         />
         <input
           className={`${inputClass} col-span-2`}
-          placeholder="Modifications (e.g. extra cheese, no onions)"
+          placeholder="Modifications (e.g. +extra cheese, -onions)"
           value={pizza.modifications}
           onChange={e => set('modifications', e.target.value)}
         />
