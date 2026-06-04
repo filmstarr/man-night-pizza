@@ -314,7 +314,9 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
   }
 
   return createPortal(
-    <div ref={containerRef} className={pinned ? 'fixed right-0 top-0 z-40 flex' : 'fixed inset-x-0 top-0 z-50 lg:flex'} style={pinned ? { height: '100dvh' } : undefined}>
+    <>
+      {!pinned && <div className="fixed inset-0 z-40 bg-gray-950 lg:hidden" aria-hidden="true" />}
+      <div ref={containerRef} className={pinned ? 'fixed right-0 top-0 z-40 flex' : 'fixed inset-x-0 top-0 z-50 lg:flex'} style={pinned ? { height: '100dvh' } : undefined}>
       {!pinned && <div className="hidden lg:block flex-1 bg-black/30 cursor-pointer" onClick={onClose} />}
       <div className="flex flex-col h-full w-full lg:w-96 bg-gray-950 lg:border-l lg:border-gray-800">
       {/* Header */}
@@ -456,7 +458,8 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
         </button>
       </div>
       </div>
-    </div>,
+    </div>
+    </>,
     document.body
   )
 }
