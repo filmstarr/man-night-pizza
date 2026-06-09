@@ -47,7 +47,7 @@ function ReactionPills({ reactions, currentUserId, userMap }: {
     <div ref={pillRef} className="relative mt-1 self-start">
       <button
         onClick={() => setShowSummary(s => !s)}
-        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
+        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-colors ${
           iOwn
             ? 'bg-blue-600/30 border border-blue-500 text-white'
             : 'bg-gray-700 border border-gray-600 text-gray-200 hover:bg-gray-600'
@@ -562,34 +562,33 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
               return (
                 <div
                   key={msg.id}
-                  className={`group flex ${groupEnd ? 'mb-3' : 'mb-0.5'} ${isOwn ? 'justify-end' : 'justify-start'}`}
-                  onTouchStart={e => {
-                    const target = e.target as Element
-                    longPressTimerRef.current = setTimeout(() => {
-                      e.preventDefault()
-                      longPressTimerRef.current = null
-                      if (!isOwn) {
-                        const bubble = target.closest('[data-bubble]') ?? e.currentTarget.querySelector('[data-bubble]') ?? e.currentTarget
-                        openPicker(msg.id, bubble.getBoundingClientRect())
-                      }
-                    }, 500)
-                  }}
-                  onTouchEnd={e => {
-                    if (longPressTimerRef.current) {
-                      clearTimeout(longPressTimerRef.current)
-                      longPressTimerRef.current = null
-                      if (!(e.target as Element).closest('[data-reaction-btns]')) {
-                        setPressedMsgId(prev => prev === msg.id ? null : msg.id)
-                      }
-                    }
-                  }}
-                  onTouchMove={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null } }}
+                  className={`flex ${groupEnd ? 'mb-3' : 'mb-0.5'} ${isOwn ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`flex flex-col max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}>
                     {showName && (
                       <span className="text-xs text-gray-400 mb-1 px-1">{senderName}</span>
                     )}
-                    <div className="relative" data-bubble>
+                    <div
+                      className="relative group"
+                      data-bubble
+                      onTouchStart={e => {
+                        const el = e.currentTarget
+                        longPressTimerRef.current = setTimeout(() => {
+                          longPressTimerRef.current = null
+                          if (!isOwn) openPicker(msg.id, el.getBoundingClientRect())
+                        }, 500)
+                      }}
+                      onTouchEnd={e => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current)
+                          longPressTimerRef.current = null
+                          if (!(e.target as Element).closest('[data-reaction-btns]')) {
+                            setPressedMsgId(prev => prev === msg.id ? null : msg.id)
+                          }
+                        }
+                      }}
+                      onTouchMove={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null } }}
+                    >
                       <div className={`px-3 py-1.5 rounded-[17px] ${isOwn ? `bg-blue-600 text-white ${groupEnd ? 'rounded-br-none' : ''}` : `bg-gray-800 text-white ${groupEnd ? 'rounded-bl-none' : ''}`}`}>
                         {msg.deleted ? (
                           <p className="text-sm italic opacity-50">Message deleted</p>
