@@ -415,7 +415,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
     const left = (chatRect?.left ?? 0) + 12
     const width = chatRect ? chatRect.width - 24 : undefined
     const spaceBelow = window.innerHeight - pickerAnchor.bottom
-    if (spaceBelow >= 400) {
+    if (spaceBelow >= 360) {
       return { position: 'fixed', left, width, top: pickerAnchor.bottom + 4 }
     }
     return { position: 'fixed', left, width, bottom: window.innerHeight - pickerAnchor.top + 4 }
