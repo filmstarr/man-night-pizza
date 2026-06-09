@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 import { getMessaging, getToken } from 'firebase/messaging'
 
 const firebaseConfig = {
@@ -15,6 +16,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const fns = getFunctions(app, 'europe-west1')
 
 async function getFcmToken(): Promise<string | null> {
   const messaging = getMessaging(app)

@@ -1,7 +1,74 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import type { User, ChatMessage } from '../types'
-import { sendMessage, loadMoreMessages, setChatNotificationsEnabled, markMessagesRead } from '../lib/firestore'
+import { sendMessage, loadMoreMessages, setChatNotificationsEnabled, markMessagesRead, addReaction, removeReaction, notifyReaction } from '../lib/firestore'
+
+const EmojiPicker = lazy(() => import('emoji-picker-react'))
+import { Theme as EmojiTheme } from 'emoji-picker-react'
+
+
+function ReactionPills({ reactions, currentUserId, userMap }: {
+  reactions: Record<string, string[]>
+  currentUserId: string
+  userMap: Record<string, string>
+}) {
+  const [showSummary, setShowSummary] = useState(false)
+  const pillRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showSummary) return
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (!pillRef.current?.contains(e.target as Node)) setShowSummary(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [showSummary])
+
+  const entries = Object.entries(reactions).filter(([, uids]) => uids.length > 0)
+  if (entries.length === 0) return null
+
+  const totalCount = entries.reduce((sum, [, uids]) => sum + uids.length, 0)
+  const allEmojis = entries.map(([emoji]) => emoji).join('')
+  const iOwn = entries.some(([, uids]) => uids.includes(currentUserId))
+
+  const userReactions: Record<string, string[]> = {}
+  for (const [emoji, uids] of entries) {
+    for (const uid of uids) {
+      if (!userReactions[uid]) userReactions[uid] = []
+      userReactions[uid].push(emoji)
+    }
+  }
+
+  return (
+    <div ref={pillRef} className="relative mt-1 self-start">
+      <button
+        onClick={() => setShowSummary(s => !s)}
+        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
+          iOwn
+            ? 'bg-blue-600/30 border border-blue-500 text-white'
+            : 'bg-gray-700 border border-gray-600 text-gray-200 hover:bg-gray-600'
+        }`}
+      >
+        <span>{allEmojis}</span>
+        <span className="text-gray-400">{totalCount}</span>
+      </button>
+      {showSummary && (
+        <div className="absolute bottom-full mb-1 left-0 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-200 z-10 shadow-lg min-w-max">
+          {Object.entries(userReactions).map(([uid, emojis]) => (
+            <div key={uid} className="flex items-center gap-2 py-0.5">
+              <span className="text-gray-400">{userMap[uid] ?? 'Someone'}</span>
+              <span>{emojis.join(' ')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function formatTime(ts: number): string {
   return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(ts))
@@ -50,6 +117,13 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevLastMessageIdRef = useRef<string | null>(messages[messages.length - 1]?.id ?? null)
   const lastLoadedBeforeRef = useRef<number | null>(null)
+  const [pickerMsgId, setPickerMsgId] = useState<string | null>(null)
+  const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null)
+  const [pressedMsgId, setPressedMsgId] = useState<string | null>(null)
+  const pickerContainerRef = useRef<HTMLDivElement>(null)
+  const chatPanelRef = useRef<HTMLDivElement>(null)
+  const inputAreaRef = useRef<HTMLDivElement>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function scheduleMarkRead() {
     if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current)
@@ -62,15 +136,24 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
     }, 1000)
   }
 
-  // Merge new messages from the subscription into allMessages.
-  // We only add — never remove — so messages can never disappear as the
-  // subscription window slides forward.
+  // Merge subscription updates into allMessages — add new messages and update
+  // changed fields (e.g. reactions) on existing ones. Never remove messages.
   useEffect(() => {
     setAllMessages(prev => {
-      const existingIds = new Set(prev.map(m => m.id))
-      const toAdd = messages.filter(m => !existingIds.has(m.id))
-      if (toAdd.length === 0) return prev
-      return [...prev, ...toAdd].sort((a, b) => a.createdAt - b.createdAt)
+      const existingById = new Map(prev.map(m => [m.id, m]))
+      let changed = false
+      for (const m of messages) {
+        const existing = existingById.get(m.id)
+        if (!existing) {
+          existingById.set(m.id, m)
+          changed = true
+        } else if (existing.reactions !== m.reactions) {
+          existingById.set(m.id, { ...existing, reactions: m.reactions })
+          changed = true
+        }
+      }
+      if (!changed) return prev
+      return [...existingById.values()].sort((a, b) => a.createdAt - b.createdAt)
     })
   }, [messages])
 
@@ -101,6 +184,18 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current)
     }
   }, [])
+
+  // Clear pressedMsgId when the user touches outside the reaction button container
+  useEffect(() => {
+    if (!pressedMsgId) return
+    const handler = (e: TouchEvent) => {
+      if (!(e.target as Element).closest('[data-reaction-btns]')) {
+        setPressedMsgId(null)
+      }
+    }
+    const id = setTimeout(() => document.addEventListener('touchstart', handler), 100)
+    return () => { clearTimeout(id); document.removeEventListener('touchstart', handler) }
+  }, [pressedMsgId])
 
   // Block touchmove on non-scrollable parts of the dialog (header, input area)
   // so they don't bleed through to the underlying page on iOS
@@ -263,6 +358,52 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
   const notifEnabled = permissionState === 'granted' && currentUser.chatNotificationsEnabled !== false
   const notifDisabled = permissionState === 'denied' || permissionState === 'unsupported'
 
+  async function handleToggleReaction(msgId: string, emoji: string) {
+    const msg = allMessages.find(m => m.id === msgId)
+    if (!msg) return
+    const alreadyReacted = (msg.reactions?.[emoji] ?? []).includes(currentUser.id)
+    if (alreadyReacted) {
+      await removeReaction(msgId, emoji, currentUser.id)
+    } else {
+      await addReaction(msgId, emoji, currentUser.id)
+      if (msg.userId !== currentUser.id) {
+        notifyReaction(currentUser.id, currentUser.name, msg.userId, emoji).catch(() => {})
+      }
+    }
+  }
+
+  async function handleClearReactions(msgId: string) {
+    const msg = allMessages.find(m => m.id === msgId)
+    if (!msg?.reactions) return
+    await Promise.all(
+      Object.entries(msg.reactions)
+        .filter(([, uids]) => uids.includes(currentUser.id))
+        .map(([emoji]) => removeReaction(msgId, emoji, currentUser.id))
+    )
+  }
+
+  function openPicker(msgId: string, rect: DOMRect) {
+    setPickerMsgId(msgId)
+    setPickerAnchor(rect)
+  }
+
+  function closePicker() {
+    setPickerMsgId(null)
+    setPickerAnchor(null)
+  }
+
+  function getPickerStyle(): React.CSSProperties {
+    if (!pickerAnchor) return {}
+    const chatRect = chatPanelRef.current?.getBoundingClientRect()
+    const left = (chatRect?.left ?? 0) + 12
+    const width = chatRect ? chatRect.width - 24 : undefined
+    const spaceBelow = window.innerHeight - pickerAnchor.bottom
+    if (spaceBelow >= 400) {
+      return { position: 'fixed', left, width, top: pickerAnchor.bottom + 4 }
+    }
+    return { position: 'fixed', left, width, bottom: window.innerHeight - pickerAnchor.top + 4 }
+  }
+
   const userMap = Object.fromEntries(users.map(u => [u.id, u.name]))
 
   // Build flat list with date separators + new-messages divider, annotated with group boundaries
@@ -318,7 +459,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       {!pinned && <div className="fixed inset-0 z-40 bg-gray-950 lg:hidden" aria-hidden="true" />}
       <div ref={containerRef} className={pinned ? 'fixed right-0 top-0 z-40 flex' : 'fixed inset-x-0 top-0 z-50 lg:flex'} style={pinned ? { height: '100dvh' } : undefined}>
       {!pinned && <div className="hidden lg:block flex-1 bg-black/30 cursor-pointer" onClick={onClose} />}
-      <div className="flex flex-col h-full w-full lg:w-96 bg-gray-950 lg:border-l lg:border-gray-800">
+      <div ref={chatPanelRef} className="flex flex-col h-full w-full lg:w-96 bg-gray-950 lg:border-l lg:border-gray-800">
       {/* Header */}
       <div className="flex items-center justify-between px-4 border-b border-gray-800 shrink-0 h-[57px]">
         <h2 className="text-base font-semibold text-white">Pizza Chat 🍕</h2>
@@ -365,7 +506,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-y-contain px-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-y-contain px-3 select-none">
         {allMessages.length === 0 ? (
           <p className="text-center text-gray-500 text-sm mt-8 italic">No messages yet. Say hello! 👋</p>
         ) : (
@@ -399,16 +540,73 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
               const { msg, showName, showTime, groupEnd } = item
               const isOwn = msg.userId === currentUser.id
               const senderName = userMap[msg.userId] ?? 'Unknown'
+              const hasOwnReaction = !!(msg.reactions && Object.values(msg.reactions).some(uids => uids.includes(currentUser.id)))
 
               return (
-                <div key={msg.id} className={`flex ${groupEnd ? 'mb-3' : 'mb-0.5'} ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  key={msg.id}
+                  className={`group flex ${groupEnd ? 'mb-3' : 'mb-0.5'} ${isOwn ? 'justify-end' : 'justify-start'}`}
+                  onTouchStart={e => {
+                    const target = e.target as Element
+                    longPressTimerRef.current = setTimeout(() => {
+                      e.preventDefault()
+                      longPressTimerRef.current = null
+                      const bubble = target.closest('[data-bubble]') ?? e.currentTarget.querySelector('[data-bubble]') ?? e.currentTarget
+                      openPicker(msg.id, bubble.getBoundingClientRect())
+                    }, 500)
+                  }}
+                  onTouchEnd={e => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current)
+                      longPressTimerRef.current = null
+                      if (!(e.target as Element).closest('[data-reaction-btns]')) {
+                        setPressedMsgId(prev => prev === msg.id ? null : msg.id)
+                      }
+                    }
+                  }}
+                  onTouchMove={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null } }}
+                >
                   <div className={`flex flex-col max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}>
                     {showName && (
                       <span className="text-xs text-gray-400 mb-1 px-1">{senderName}</span>
                     )}
-                    <div className={`px-3 py-1.5 rounded-[17px] ${isOwn ? `bg-blue-600 text-white ${groupEnd ? 'rounded-br-none' : ''}` : `bg-gray-800 text-white ${groupEnd ? 'rounded-bl-none' : ''}`}`}>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                    <div className="relative" data-bubble>
+                      <div className={`px-3 py-1.5 rounded-[17px] ${isOwn ? `bg-blue-600 text-white ${groupEnd ? 'rounded-br-none' : ''}` : `bg-gray-800 text-white ${groupEnd ? 'rounded-bl-none' : ''}`}`}>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                      </div>
+                      <div
+                        data-reaction-btns
+                        className={`absolute top-1/2 -translate-y-1/2 transition-opacity items-center rounded-full bg-gray-700 overflow-hidden ${isOwn ? 'right-full mr-1' : 'left-full ml-1'} ${pressedMsgId === msg.id ? 'flex opacity-100' : 'hidden sm:flex opacity-0 group-hover:opacity-100'}`}
+                      >
+                        <button
+                          onClick={e => {
+                            setPressedMsgId(null)
+                            const bubble = (e.currentTarget.closest('[data-bubble]') ?? e.currentTarget) as Element
+                            openPicker(msg.id, bubble.getBoundingClientRect())
+                          }}
+                          className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 text-base sm:text-sm leading-none"
+                          title="Add reaction"
+                        >😊</button>
+                        {hasOwnReaction && (
+                          <button
+                            onClick={() => { setPressedMsgId(null); handleClearReactions(msg.id) }}
+                            className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
+                            title="Clear your reactions"
+                          >
+                            <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {msg.reactions && (
+                      <ReactionPills
+                        reactions={msg.reactions}
+                        currentUserId={currentUser.id}
+                        userMap={userMap}
+                      />
+                    )}
                     {showTime && (
                       <span className="text-[10px] text-gray-500 mt-1 px-1">{formatTime(msg.createdAt)}</span>
                     )}
@@ -422,7 +620,7 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-800 px-4 pt-3 flex gap-2 items-end shrink-0" style={{ paddingBottom: keyboardVisible ? '0.75rem' : 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+      <div ref={inputAreaRef} className="border-t border-gray-800 px-4 pt-3 flex gap-2 items-end shrink-0" style={{ paddingBottom: keyboardVisible ? '0.75rem' : 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
         <textarea
           rows={1}
           value={text}
@@ -459,6 +657,27 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
       </div>
       </div>
     </div>
+    {pickerMsgId && pickerAnchor && (
+      <Suspense fallback={null}>
+        <div className="fixed inset-0 z-[9999]" onClick={closePicker}>
+          <div ref={pickerContainerRef} style={getPickerStyle()} onClick={e => e.stopPropagation()}>
+            <EmojiPicker
+              theme={EmojiTheme.DARK}
+              reactionsDefaultOpen={true}
+              autoFocusSearch={false}
+              allowExpandReactions={true}
+              previewConfig={{showPreview: false}}
+              width="100%"
+              height={350}
+              onEmojiClick={({ emoji }) => {
+                handleToggleReaction(pickerMsgId, emoji)
+                closePicker()
+              }}
+            />
+          </div>
+        </div>
+      </Suspense>
+    )}
     </>,
     document.body
   )

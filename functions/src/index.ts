@@ -331,6 +331,46 @@ export const sendChatNotification = onCall(
   }
 )
 
+export const sendReactionNotification = onCall(
+  { region: 'europe-west1', cors: true, invoker: 'public' },
+  async (request): Promise<{ success: boolean }> => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in.')
+    const { reactorUserId, reactorName, messageAuthorUserId, emoji } = request.data as {
+      reactorUserId: string
+      reactorName: string
+      messageAuthorUserId: string
+      emoji: string
+    }
+    if (reactorUserId === messageAuthorUserId) return { success: false }
+
+    const authorDoc = await db.collection('users').doc(messageAuthorUserId).get()
+    if (!authorDoc.exists) return { success: false }
+    const data = authorDoc.data()!
+    if (data.chatNotificationsEnabled === false) return { success: false }
+    const tokens: string[] = Array.isArray(data.fcmTokens) ? data.fcmTokens : []
+    if (tokens.length === 0) return { success: false }
+
+    const message: admin.messaging.MulticastMessage = {
+      tokens,
+      data: { title: `${reactorName} reacted ${emoji}`, body: 'Tap to open chat', type: 'chat' },
+      webpush: { fcmOptions: { link: 'https://mannightpizza.web.app/?chat=1' } }
+    }
+    const response = await admin.messaging().sendEachForMulticast(message)
+
+    const staleTokens = tokens.filter((_, i) => {
+      const code = response.responses[i]?.error?.code
+      return code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token'
+    })
+    if (staleTokens.length > 0) {
+      await db.collection('users').doc(messageAuthorUserId).update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...staleTokens)
+      })
+    }
+
+    return { success: response.successCount > 0 }
+  }
+)
+
 export const cleanupOldMessages = onSchedule(
   { schedule: '0 3 * * 0', region: 'europe-west1', timeZone: 'Europe/London' },
   async () => {

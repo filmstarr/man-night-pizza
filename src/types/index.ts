@@ -28,6 +28,7 @@ export interface ChatMessage {
   userId: string
   text: string
   createdAt: number
+  reactions?: Record<string, string[]>  // emoji → [userId, ...]
 }
 
 export interface AppState {

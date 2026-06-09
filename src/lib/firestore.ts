@@ -1,3 +1,4 @@
+import { httpsCallable } from 'firebase/functions'
 import {
   collection,
   doc,
@@ -15,7 +16,7 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore'
-import { db, createAuthAccount } from './firebase'
+import { db, fns, createAuthAccount } from './firebase'
 import type { User, AppState, PizzaOrder, OrderSnapshot, ChatMessage } from '../types'
 import { EMPTY_PIZZA } from '../types'
 
@@ -291,6 +292,22 @@ export async function loadMoreMessages(beforeTimestamp: number): Promise<ChatMes
 
 export async function sendMessage(userId: string, text: string): Promise<void> {
   await addDoc(collection(db, MESSAGES_COLLECTION), { userId, text, createdAt: Date.now() })
+}
+
+export async function notifyReaction(reactorUserId: string, reactorName: string, messageAuthorUserId: string, emoji: string): Promise<void> {
+  await httpsCallable(fns, 'sendReactionNotification')({ reactorUserId, reactorName, messageAuthorUserId, emoji })
+}
+
+export async function addReaction(messageId: string, emoji: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, MESSAGES_COLLECTION, messageId), {
+    [`reactions.${emoji}`]: arrayUnion(userId)
+  })
+}
+
+export async function removeReaction(messageId: string, emoji: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, MESSAGES_COLLECTION, messageId), {
+    [`reactions.${emoji}`]: arrayRemove(userId)
+  })
 }
 
 export async function markMessagesRead(userId: string): Promise<void> {
