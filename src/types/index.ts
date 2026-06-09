@@ -23,12 +23,21 @@ export interface User {
   createdAt: number
 }
 
+export interface QuotedMessage {
+  id: string
+  userId: string
+  text: string
+}
+
 export interface ChatMessage {
   id: string
   userId: string
   text: string
   createdAt: number
+  deleted?: boolean
+  edited?: boolean
   reactions?: Record<string, string[]>  // emoji → [userId, ...]
+  quotedMessage?: QuotedMessage
 }
 
 export interface AppState {

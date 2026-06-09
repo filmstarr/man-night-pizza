@@ -17,7 +17,7 @@ import {
   arrayRemove
 } from 'firebase/firestore'
 import { db, fns, createAuthAccount } from './firebase'
-import type { User, AppState, PizzaOrder, OrderSnapshot, ChatMessage } from '../types'
+import type { User, AppState, PizzaOrder, OrderSnapshot, ChatMessage, QuotedMessage } from '../types'
 import { EMPTY_PIZZA } from '../types'
 
 const USERS_COLLECTION = 'users'
@@ -290,8 +290,10 @@ export async function loadMoreMessages(beforeTimestamp: number): Promise<ChatMes
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage))
 }
 
-export async function sendMessage(userId: string, text: string): Promise<void> {
-  await addDoc(collection(db, MESSAGES_COLLECTION), { userId, text, createdAt: Date.now() })
+export async function sendMessage(userId: string, text: string, quotedMessage?: QuotedMessage): Promise<void> {
+  const data: Record<string, unknown> = { userId, text, createdAt: Date.now() }
+  if (quotedMessage) data.quotedMessage = quotedMessage
+  await addDoc(collection(db, MESSAGES_COLLECTION), data)
 }
 
 export async function notifyReaction(reactorUserId: string, reactorName: string, messageAuthorUserId: string, emoji: string): Promise<void> {
@@ -308,6 +310,14 @@ export async function removeReaction(messageId: string, emoji: string, userId: s
   await updateDoc(doc(db, MESSAGES_COLLECTION, messageId), {
     [`reactions.${emoji}`]: arrayRemove(userId)
   })
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  await updateDoc(doc(db, MESSAGES_COLLECTION, messageId), { deleted: true })
+}
+
+export async function editMessage(messageId: string, text: string): Promise<void> {
+  await updateDoc(doc(db, MESSAGES_COLLECTION, messageId), { text, edited: true })
 }
 
 export async function markMessagesRead(userId: string): Promise<void> {

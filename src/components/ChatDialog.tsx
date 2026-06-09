@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import type { User, ChatMessage } from '../types'
-import { sendMessage, loadMoreMessages, setChatNotificationsEnabled, markMessagesRead, addReaction, removeReaction, notifyReaction } from '../lib/firestore'
+import type { User, ChatMessage, QuotedMessage } from '../types'
+import { sendMessage, loadMoreMessages, setChatNotificationsEnabled, markMessagesRead, addReaction, removeReaction, notifyReaction, deleteMessage, editMessage } from '../lib/firestore'
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'))
 import { Theme as EmojiTheme } from 'emoji-picker-react'
@@ -120,6 +120,9 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
   const [pickerMsgId, setPickerMsgId] = useState<string | null>(null)
   const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null)
   const [pressedMsgId, setPressedMsgId] = useState<string | null>(null)
+  const [quotingMessage, setQuotingMessage] = useState<QuotedMessage | null>(null)
+  const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null)
+  const [editingMessage, setEditingMessage] = useState<{ id: string; originalText: string } | null>(null)
   const pickerContainerRef = useRef<HTMLDivElement>(null)
   const chatPanelRef = useRef<HTMLDivElement>(null)
   const inputAreaRef = useRef<HTMLDivElement>(null)
@@ -147,8 +150,8 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
         if (!existing) {
           existingById.set(m.id, m)
           changed = true
-        } else if (existing.reactions !== m.reactions) {
-          existingById.set(m.id, { ...existing, reactions: m.reactions })
+        } else if (existing.reactions !== m.reactions || existing.deleted !== m.deleted || existing.text !== m.text || existing.edited !== m.edited) {
+          existingById.set(m.id, { ...existing, reactions: m.reactions, deleted: m.deleted, text: m.text, edited: m.edited })
           changed = true
         }
       }
@@ -332,10 +335,18 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
     setSending(true)
     const trimmed = text.trim()
     try {
-      await sendMessage(currentUser.id, trimmed)
+      if (editingMessage) {
+        await editMessage(editingMessage.id, trimmed)
+        setAllMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, text: trimmed, edited: true } : m))
+        setEditingMessage(null)
+      } else {
+        const quote = quotingMessage ?? undefined
+        await sendMessage(currentUser.id, trimmed, quote)
+        setQuotingMessage(null)
+        onMessageSent(currentUser.name, trimmed)
+      }
       updateText('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
-      onMessageSent(currentUser.name, trimmed)
     } finally {
       setSending(false)
     }
@@ -370,6 +381,12 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
         notifyReaction(currentUser.id, currentUser.name, msg.userId, emoji).catch(() => {})
       }
     }
+  }
+
+  async function handleDeleteMessage(msgId: string) {
+    setPressedMsgId(null)
+    await deleteMessage(msgId)
+    setAllMessages(prev => prev.map(m => m.id === msgId ? { ...m, deleted: true } : m))
   }
 
   async function handleClearReactions(msgId: string) {
@@ -572,35 +589,119 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
                     )}
                     <div className="relative" data-bubble>
                       <div className={`px-3 py-1.5 rounded-[17px] ${isOwn ? `bg-blue-600 text-white ${groupEnd ? 'rounded-br-none' : ''}` : `bg-gray-800 text-white ${groupEnd ? 'rounded-bl-none' : ''}`}`}>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
-                      </div>
-                      <div
-                        data-reaction-btns
-                        className={`absolute top-1/2 -translate-y-1/2 transition-opacity items-center rounded-full bg-gray-700 overflow-hidden ${isOwn ? 'right-full mr-1' : 'left-full ml-1'} ${pressedMsgId === msg.id ? 'flex opacity-100' : 'hidden sm:flex opacity-0 group-hover:opacity-100'}`}
-                      >
-                        <button
-                          onClick={e => {
-                            setPressedMsgId(null)
-                            const bubble = (e.currentTarget.closest('[data-bubble]') ?? e.currentTarget) as Element
-                            openPicker(msg.id, bubble.getBoundingClientRect())
-                          }}
-                          className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 text-base sm:text-sm leading-none"
-                          title="Add reaction"
-                        >😊</button>
-                        {hasOwnReaction && (
-                          <button
-                            onClick={() => { setPressedMsgId(null); handleClearReactions(msg.id) }}
-                            className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
-                            title="Clear your reactions"
-                          >
-                            <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
-                            </svg>
-                          </button>
+                        {msg.deleted ? (
+                          <p className="text-sm italic opacity-50">Message deleted</p>
+                        ) : (
+                          <>
+                            {msg.quotedMessage && (
+                              <div className={`mb-1.5 pl-2 border-l-2 rounded-lg text-xs ${isOwn ? 'border-white/70 bg-black/30' : 'border-blue-400 bg-black/40'} px-2 py-1.5`}>
+                                <div className={`font-semibold mb-0.5 ${isOwn ? 'text-white/90' : 'text-blue-300'}`}>{userMap[msg.quotedMessage.userId] ?? 'Unknown'}</div>
+                                <div className={`truncate ${isOwn ? 'text-white/80' : 'text-gray-300'}`}>{msg.quotedMessage.text}</div>
+                              </div>
+                            )}
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                            {msg.edited && <p className="text-[10px] italic opacity-50 text-right">edited</p>}
+                          </>
                         )}
                       </div>
+                      {!msg.deleted && <div
+                        data-reaction-btns
+                        className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex-col items-center gap-1 ${isOwn ? 'right-full mr-1' : 'left-full ml-1'} ${pressedMsgId === msg.id ? 'flex opacity-100' : 'hidden sm:flex opacity-0 group-hover:opacity-100'}`}
+                      >
+                        {/* React/delete + clear — merged pill (top) */}
+                        <div className="flex items-center rounded-full bg-gray-700 overflow-hidden">
+                          {isOwn ? (
+                            confirmDeleteMsgId === msg.id ? (
+                              <>
+                                <button
+                                  onClick={() => { setConfirmDeleteMsgId(null); handleDeleteMessage(msg.id) }}
+                                  className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-green-700 leading-none"
+                                  title="Confirm delete"
+                                >
+                                  <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="1.5 6.5 4.5 9.5 10.5 2.5"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteMsgId(null)}
+                                  className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
+                                  title="Cancel"
+                                >
+                                  <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                    <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+                                  </svg>
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setConfirmDeleteMsgId(msg.id)}
+                                  className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-red-700 leading-none"
+                                  title="Delete message"
+                                >
+                                  <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="1 3 11 3"/><path d="M2 3l.7 7.3A1 1 0 0 0 3.7 11h4.6a1 1 0 0 0 1-.7L10 3"/><path d="M4.5 3V2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setPressedMsgId(null)
+                                    setEditingMessage({ id: msg.id, originalText: msg.text })
+                                    updateText(msg.text)
+                                    requestAnimationFrame(() => {
+                                      const ta = textareaRef.current
+                                      if (ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px`; ta.focus() }
+                                    })
+                                  }}
+                                  className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
+                                  title="Edit message"
+                                >
+                                  <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M8.5 1.5a1.2 1.2 0 0 1 1.7 1.7L3.5 9.9l-2.5.6.6-2.5Z"/>
+                                  </svg>
+                                </button>
+                              </>
+                            )
+                          ) : (
+                            <button
+                              onClick={e => {
+                                setPressedMsgId(null)
+                                const bubble = (e.currentTarget.closest('[data-bubble]') ?? e.currentTarget) as Element
+                                openPicker(msg.id, bubble.getBoundingClientRect())
+                              }}
+                              className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 text-base sm:text-sm leading-none"
+                              title="Add reaction"
+                            >😊</button>
+                          )}
+                          {hasOwnReaction && (
+                            <button
+                              onClick={() => { setPressedMsgId(null); handleClearReactions(msg.id) }}
+                              className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
+                              title="Clear your reactions"
+                            >
+                              <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        {/* Reply — separate pill (bottom) */}
+                        <button
+                          onClick={() => {
+                            setPressedMsgId(null)
+                            setQuotingMessage({ id: msg.id, userId: msg.userId, text: msg.text })
+                            textareaRef.current?.focus()
+                          }}
+                          className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-gray-700 hover:bg-gray-600 leading-none"
+                          title="Quote"
+                        >
+                          <svg className="w-4 h-4 sm:w-3 sm:h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="4.5 8.5 2 6 4.5 3.5"/><path d="M10 9v-1a2 2 0 0 0-2-2H2"/>
+                          </svg>
+                        </button>
+                      </div>}
                     </div>
-                    {msg.reactions && (
+                    {!msg.deleted && msg.reactions && (
                       <ReactionPills
                         reactions={msg.reactions}
                         currentUserId={currentUser.id}
@@ -618,6 +719,36 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
           </div>
         )}
       </div>
+
+      {/* Editing preview */}
+      {editingMessage && (
+        <div className="border-t border-gray-800 px-4 py-2 flex items-center gap-2 bg-gray-900 shrink-0">
+          <div className="flex-1 border-l-2 border-yellow-500 pl-2 min-w-0">
+            <div className="text-xs text-yellow-400 font-medium">Editing message</div>
+            <div className="text-xs text-gray-400 truncate">{editingMessage.originalText}</div>
+          </div>
+          <button onClick={() => { setEditingMessage(null); updateText(''); if (textareaRef.current) textareaRef.current.style.height = 'auto' }} className="text-gray-500 hover:text-gray-300 shrink-0">
+            <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Quote preview */}
+      {quotingMessage && (
+        <div className="border-t border-gray-800 px-4 py-2 flex items-center gap-2 bg-gray-900 shrink-0">
+          <div className="flex-1 border-l-2 border-blue-500 pl-2 min-w-0">
+            <div className="text-xs text-blue-400 font-medium">{userMap[quotingMessage.userId] ?? 'Unknown'}</div>
+            <div className="text-xs text-gray-400 truncate">{quotingMessage.text}</div>
+          </div>
+          <button onClick={() => setQuotingMessage(null)} className="text-gray-500 hover:text-gray-300 shrink-0">
+            <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div ref={inputAreaRef} className="border-t border-gray-800 px-4 pt-3 flex gap-2 items-end shrink-0" style={{ paddingBottom: keyboardVisible ? '0.75rem' : 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
