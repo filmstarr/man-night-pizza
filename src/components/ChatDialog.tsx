@@ -568,8 +568,10 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
                     longPressTimerRef.current = setTimeout(() => {
                       e.preventDefault()
                       longPressTimerRef.current = null
-                      const bubble = target.closest('[data-bubble]') ?? e.currentTarget.querySelector('[data-bubble]') ?? e.currentTarget
-                      openPicker(msg.id, bubble.getBoundingClientRect())
+                      if (!isOwn) {
+                        const bubble = target.closest('[data-bubble]') ?? e.currentTarget.querySelector('[data-bubble]') ?? e.currentTarget
+                        openPicker(msg.id, bubble.getBoundingClientRect())
+                      }
                     }, 500)
                   }}
                   onTouchEnd={e => {
@@ -646,12 +648,14 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
                                 <button
                                   onClick={() => {
                                     setPressedMsgId(null)
+                                    setQuotingMessage(null)
                                     setEditingMessage({ id: msg.id, originalText: msg.text })
                                     updateText(msg.text)
-                                    requestAnimationFrame(() => {
-                                      const ta = textareaRef.current
-                                      if (ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px`; ta.focus() }
-                                    })
+                                    const ta = textareaRef.current
+                                    if (ta) {
+                                      ta.focus()
+                                      requestAnimationFrame(() => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px` })
+                                    }
                                   }}
                                   className="flex items-center justify-center w-9 h-9 sm:w-6 sm:h-6 hover:bg-gray-600 leading-none"
                                   title="Edit message"
@@ -689,6 +693,11 @@ export function ChatDialog({ currentUser, users, messages, pinned, onPinChange, 
                         <button
                           onClick={() => {
                             setPressedMsgId(null)
+                            if (editingMessage) {
+                              setEditingMessage(null)
+                              updateText('')
+                              if (textareaRef.current) textareaRef.current.style.height = 'auto'
+                            }
                             setQuotingMessage({ id: msg.id, userId: msg.userId, text: msg.text })
                             textareaRef.current?.focus()
                           }}
